@@ -1,0 +1,132 @@
+<style>
+#search-result-area {display: none;}
+.container {padding-top: 1em;}
+</style>
+
+<div class="container">
+    <div class="row">
+        <div class="col-12">
+            <div class="mb-3">
+                <label for="email" class="form-label">Пожалуйста, введите адрес получателя</label>
+                <input type="email" class="form-control" id="email" placeholder="name@example.com">
+                <div class="invalid-feedback" id="email-invalid"></div>
+            </div>
+        </div>
+    </div>
+    <div class="row" id="search-result-area">
+        <div class="col-12">
+            <div>Найдено: <span id="search-count-total"></span></div>
+            <div>Показано: <span id="search-count"></span></div>
+            <table class="table table-hover" style="width:100%; font-size: 0.7em;">
+                <thead>
+                <tr>
+                    <th class="col-2">timestamp</th>
+                    <th class="col-10">строка лога</th>
+                </tr>
+                </thead>
+                <tbody id="search-result-list">
+                    <td>&nbsp;</td>
+                    <td>&nbsp;</td>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div id="spinner"></div>
+</div>
+
+<script>
+let messages_data = [];
+let search_count_total = 0;
+let search_count = 0;
+
+// поиск записей на сервере
+$('#email').on('keyup', function(){
+
+        // чистим область результата
+        $('#search-result-area').hide();
+        $("#email").removeClass('is-invalid');
+
+        var $this = $(this);
+        var $delay = 1500;
+
+        // пляски с timeout необходимы для отложенного запроса
+        clearTimeout($this.data('timer'));
+
+        $this.data('timer', setTimeout(function(){
+
+                $this.removeData('timer');
+
+                // если меньше 4 символов, то не ищем
+                if ($this.val().length < 4) {return;}
+
+                // призводим поиск на сервере
+                let spinner = create_spinner('spinner');
+
+                $.ajax({
+                    url: '/ajx/messages?email=' + $this.val() + '&rnd=' + Math.random()*1000,
+                    processData: false,
+                    contentType: false,
+                    type: 'GET',
+                    success: function (data, textStatus) {
+
+                        $(spinner).remove();
+                        if (! data.is_success) {
+                            alert('error: ' + data.error_mess);
+                            return;
+                        }
+
+                        // успешно
+                        messages_data = data.messages;
+                        search_count_total = data.search_count_total;
+                        search_count = data.search_count;
+                        render_data();
+                    },
+                    error: function(XMLHttpRequest, textStatus, errorThrown) {
+                        $(spinner).remove();
+
+                        if ( 'responseJSON' in XMLHttpRequest && 'error_mess' in XMLHttpRequest.responseJSON ) {
+                            let error_mess = XMLHttpRequest.responseJSON.error_mess;
+
+                            if ( typeof error_mess == "object" ) {
+                                for (id in error_mess) {
+                                    let id_r = id.replace(/\_/g, "-");
+                                    $("#" + id_r).addClass('is-invalid');
+                                    $("#" + id_r + "-invalid").html( error_mess[id] );
+                                }
+                                return;
+                            }
+
+                            alert('error: ' + error_mess);
+                            return;
+                        }
+
+                        alert('error: ошибка соединения: ' + errorThrown);
+                    }
+                });
+
+        }, $delay));
+});
+
+// отображение данных
+function render_data() {
+
+    // очищаем
+    $("#search-result-list td").closest("tr").remove();
+
+    // начинаем отображать
+    $('#search-count-total').html(search_count_total);
+    $('#search-count').html(search_count);
+    $('#search-result-area').show();
+
+    // формируем таблицу
+    let str = '';
+    for ( let i = 0; i < messages_data.length; i = i + 1 ) {
+        str += '<tr>' +
+               '  <td>' + messages_data[i].created + '</td>' +
+               '  <td>' + messages_data[i].str + '</td>' +
+               '</tr>';
+    }
+
+    $('#search-result-list').append(str);
+}
+</script>
